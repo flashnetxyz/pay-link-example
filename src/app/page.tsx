@@ -72,9 +72,13 @@ function useCountdown(expiresAt: string | null) {
   if (!expiresAt) return { display: null, expired: false };
   const remaining = Math.max(0, Math.floor((new Date(expiresAt).getTime() - now) / 1000));
   const expired = remaining <= 0;
-  const mins = Math.floor(remaining / 60);
+  const hrs = Math.floor(remaining / 3600);
+  const mins = Math.floor((remaining % 3600) / 60);
   const secs = remaining % 60;
-  return { display: `${mins}:${secs.toString().padStart(2, "0")}`, expired };
+  const display = hrs > 0
+    ? `${hrs}:${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`
+    : `${mins}:${secs.toString().padStart(2, "0")}`;
+  return { display, expired };
 }
 
 // ---------------------------------------------------------------------------
@@ -384,7 +388,7 @@ export default function OnrampPage() {
 
   if (pageState === "tracking" && result) {
     return (
-      <div className="flex min-h-[60vh] flex-col items-center justify-start pt-10 sm:justify-center sm:pt-0 px-4">
+      <div className="flex min-h-dvh flex-col items-center justify-center px-4">
         <motion.div
           className="w-full max-w-sm space-y-8"
           initial={{ opacity: 0, y: 16 }}
