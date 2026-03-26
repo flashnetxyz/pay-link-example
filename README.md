@@ -18,8 +18,8 @@ A standalone Next.js app demonstrating how to integrate [Flashnet Pay Links](htt
 ## Quick start
 
 ```bash
-git clone https://github.com/anthropics/flashnet-onramp-example.git
-cd flashnet-onramp-example
+git clone https://github.com/flashnetxyz/pay-link-example.git
+cd pay-link-example
 cp .env.example .env.local
 # Edit .env.local and add your FLASHNET_API_KEY
 npm install
