@@ -118,11 +118,12 @@ export function orchestrationOnramp(params: {
   destinationAsset: string;
   recipientAddress: string;
   amount: string;
-  amountMode?: "exact_in" | "exact_out";
+  amountMode?: "exact_out";
   slippageBps?: number;
 }) {
   return apiCall<{
     orderId: string;
+    readToken: string;
     quoteId: string;
     depositAddress: string;
     paymentLinks: { cashApp: string; shortUrl?: string };
@@ -134,17 +135,17 @@ export function orchestrationOnramp(params: {
     feeAsset: string;
     route: string[];
     expiresAt: string;
-  }>({
+  } | { orderId: string; readToken: string; status: string; paymentLinks?: never }>({
     method: "POST",
     path: "/v1/orchestration/onramp",
     body: params,
   });
 }
 
-export function orchestrationStatus(orderId: string) {
-  return apiCall<{ order: Record<string, unknown>; stages: unknown[] }>({
+export function orchestrationStatus(orderId: string, readToken: string) {
+  return apiCall<{ order: { status: string } }>({
     method: "GET",
     path: "/v1/orchestration/status",
-    query: { id: orderId },
+    query: { id: orderId, readToken },
   });
 }

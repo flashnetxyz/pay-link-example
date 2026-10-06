@@ -89,10 +89,13 @@ type PageState = "idle" | "submitting" | "tracking";
 
 interface OnrampResult {
   orderId: string;
-  cashAppUrl: string;
-  amountIn: string;
-  estimatedOut: string;
-  expiresAt: string;
+  readToken: string;
+  payment: {
+    cashAppUrl: string;
+    amountIn: string;
+    estimatedOut: string;
+    expiresAt: string;
+  } | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -120,9 +123,9 @@ export default function OnrampPage() {
   const isFailed = orderStatus === "failed" || orderStatus === "refunded";
 
   // Invoice countdown
-  const countdownActive = pageState === "tracking" && result !== null && stepIndex(orderStatus) < 0;
+  const countdownActive = pageState === "tracking" && result?.payment != null && stepIndex(orderStatus) < 0;
   const { display: countdown, expired } = useCountdown(
-    countdownActive ? (result?.expiresAt ?? null) : null,
+    countdownActive ? (result?.payment?.expiresAt ?? null) : null,
   );
 
   useEffect(() => {
@@ -181,12 +184,13 @@ export default function OnrampPage() {
   // ---------------------------------------------------------------------------
 
   const orderId = result?.orderId ?? "";
+  const readToken = result?.readToken ?? "";
   const sseEnabled = pageState === "tracking" && orderId.length > 0;
 
   const fetchStatus = useCallback(async () => {
-    if (!orderId) return;
+    if (!orderId || !readToken) return;
     try {
-      const res = await orchestrationStatus(orderId);
+      const res = await orchestrationStatus(orderId, readToken);
       const s =
         typeof res.data.order === "object" && res.data.order !== null
           ? ((res.data.order as { status?: string }).status ?? "processing")
@@ -195,10 +199,11 @@ export default function OnrampPage() {
     } catch {
       /* keep current */
     }
-  }, [orderId]);
+  }, [orderId, readToken]);
 
   useOrderSSE({
     orderId,
+    readToken,
     onStatus: useCallback((s: string) => setOrderStatus(s), []),
     enabled: sseEnabled,
   });
@@ -339,12 +344,21 @@ export default function OnrampPage() {
       });
 
       const data = res.data;
+      if (!data.paymentLinks) {
+        setResult({ orderId: data.orderId, readToken: data.readToken, payment: null });
+        setOrderStatus(data.status);
+        setPageState("tracking");
+        return;
+      }
       setResult({
         orderId: data.orderId,
-        cashAppUrl: data.paymentLinks.cashApp,
-        amountIn: data.amountIn,
-        estimatedOut: data.estimatedOut,
-        expiresAt: data.expiresAt,
+        readToken: data.readToken,
+        payment: {
+          cashAppUrl: data.paymentLinks.cashApp,
+          amountIn: data.amountIn,
+          estimatedOut: data.estimatedOut,
+          expiresAt: data.expiresAt,
+        },
       });
       setOrderStatus("processing");
       setPageState("tracking");
@@ -386,7 +400,19 @@ export default function OnrampPage() {
   // Render: Tracking
   // ---------------------------------------------------------------------------
 
-  if (pageState === "tracking" && result) {
+  if (pageState === "tracking" && result && !result.payment) {
+    return (
+      <div className="flex min-h-dvh flex-col items-center justify-center gap-4 px-4 text-center">
+        <p className="text-xl font-medium">Order {orderStatus}</p>
+        <p className="text-sm text-muted-foreground">No payment link is available for this order.</p>
+        <p className="text-xs text-muted-foreground">{result.orderId}</p>
+        <button type="button" onClick={handleReset} className="text-sm underline">Start over</button>
+      </div>
+    );
+  }
+
+  if (pageState === "tracking" && result?.payment) {
+    const payment = result.payment;
     return (
       <div className="flex min-h-dvh flex-col items-center justify-center px-4">
         <motion.div
@@ -518,7 +544,7 @@ export default function OnrampPage() {
               </div>
 
               <a
-                href={result.cashAppUrl}
+                href={payment.cashAppUrl}
                 onClick={(e) => {
                   if (!isTouchDevice()) {
                     e.preventDefault();
@@ -549,7 +575,7 @@ export default function OnrampPage() {
               <span className="text-sm text-muted-foreground">You received</span>
               <div className="mt-2 flex items-center gap-3">
                 <span className="text-4xl font-medium tabular-nums tracking-tight">
-                  {formatUsdcDisplay(result.estimatedOut)}
+                  {formatUsdcDisplay(payment.estimatedOut)}
                 </span>
                 <span className="text-xl text-muted-foreground">USDC</span>
               </div>
@@ -592,11 +618,11 @@ export default function OnrampPage() {
                 </p>
               </div>
               <div className="mx-auto my-6 rounded-2xl bg-white p-4 w-fit">
-                <Cuer value={result.cashAppUrl} size={200} color="#000" />
+                <Cuer value={payment.cashAppUrl} size={200} color="#000" />
               </div>
               <div className="space-y-1">
                 <p className="text-sm font-mono text-muted-foreground tabular-nums">
-                  {formatBtcDisplay(result.amountIn)} BTC → {formatUsdcDisplay(result.estimatedOut)} USDC
+                  {formatBtcDisplay(payment.amountIn)} BTC → {formatUsdcDisplay(payment.estimatedOut)} USDC
                 </p>
                 {countdown && (
                   <p className="text-sm tabular-nums text-muted-foreground">
