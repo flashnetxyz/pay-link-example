@@ -6,6 +6,7 @@ const TERMINAL_STATUSES = new Set(["completed", "failed", "refunded"]);
 
 interface UseOrderSSEParams {
   orderId: string;
+  readToken: string;
   onStatus: (status: string) => void;
   enabled?: boolean;
 }
@@ -16,6 +17,7 @@ interface UseOrderSSEParams {
  */
 export function useOrderSSE({
   orderId,
+  readToken,
   onStatus,
   enabled = true,
 }: UseOrderSSEParams): { connected: boolean } {
@@ -24,9 +26,9 @@ export function useOrderSSE({
   onStatusRef.current = onStatus;
 
   useEffect(() => {
-    if (!enabled || !orderId) return;
+    if (!enabled || !orderId || !readToken) return;
 
-    const url = `/api/proxy/v1/sse/operations/${encodeURIComponent(orderId)}`;
+    const url = `/api/proxy/v1/sse/operations/${encodeURIComponent(orderId)}?${new URLSearchParams({ readToken })}`;
     const es = new EventSource(url);
 
     es.addEventListener("status", (e) => {
@@ -49,7 +51,7 @@ export function useOrderSSE({
       es.close();
       setConnected(false);
     };
-  }, [orderId, enabled]);
+  }, [orderId, readToken, enabled]);
 
   return { connected };
 }

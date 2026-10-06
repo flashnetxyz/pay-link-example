@@ -13,7 +13,7 @@ A standalone Next.js app demonstrating how to integrate [Flashnet Pay Links](htt
 ## Prerequisites
 
 - [Node.js](https://nodejs.org/) 18+ (or [Bun](https://bun.sh/))
-- A Flashnet API key — get one at [app.flashnet.xyz](https://app.flashnet.xyz)
+- A dedicated Flashnet client key (`fnp_`) in `server` mode with only `orders:onramp`, `orders:read`, and `orders:sse` scopes, created in [app.flashnet.xyz](https://app.flashnet.xyz)
 
 ## Quick start
 
@@ -50,7 +50,9 @@ Browser                          Your Server                     Flashnet API
   │  ◄──── status events (stream) ─  │  ◄──── status events ───────  │
 ```
 
-The `/api/proxy` route injects your `FLASHNET_API_KEY` server-side so it never reaches the browser.
+The `/api/proxy` route keeps `FLASHNET_API_KEY` on the server and accepts only the four exact method/path pairs below. Full `fn_` keys are rejected, even if configured by mistake. The demo only supports Lightning BTC to Solana USDC; arbitrary paths, extra parameters, privileged fee/refund fields, and upstream redirects are rejected.
+
+Onramp creation returns an order-bound `readToken`. The page keeps it in memory and supplies it for polling and SSE; Orchestra verifies its signature, expiry, key, and order binding. Knowing an order ID alone grants no read access. Screened orders preserve HTTP 202 and remain trackable without showing a payment link. Responses are not cached, and polling returns only order status. The partner key never goes into browser requests, responses, URLs, or public environment variables.
 
 ## Project structure
 
@@ -62,6 +64,8 @@ src/
 │   ├── page.tsx            # The onramp page (all-in-one)
 │   └── api/proxy/[...path]/
 │       └── route.ts        # API proxy (injects API key)
+├── server/
+│   └── onramp-proxy.ts     # Restricted proxy and request validation
 └── lib/
     ├── api.ts              # Flashnet API client (estimate, onramp, status)
     ├── use-order-sse.ts    # React hook for SSE status updates
@@ -83,7 +87,7 @@ See the full [API reference](https://docs.flashnet.xyz/api-reference).
 
 | Environment Variable | Required | Description |
 |---------------------|----------|-------------|
-| `FLASHNET_API_KEY` | Yes | Your Flashnet partner API key |
+| `FLASHNET_API_KEY` | Yes | Server-only scoped client key (`fnp_`, server mode) |
 | `FLASHNET_BASE_URL` | No | API base URL (defaults to `https://orchestration.flashnet.xyz`) |
 
 ## How it works
@@ -100,3 +104,13 @@ See the full [API reference](https://docs.flashnet.xyz/api-reference).
 - [Pay Links documentation](https://docs.flashnet.xyz/products/orchestration/pay-links)
 - [Orchestration API reference](https://docs.flashnet.xyz/api-reference)
 - [Flashnet website](https://flashnet.xyz)
+
+## Deployment and credential migration
+
+Before deploying this change, provision a dedicated `fnp_` client key in `server` mode with exactly `orders:onramp`, `orders:read`, and `orders:sse`, then configure it as the server-only `FLASHNET_API_KEY` in Vercel. Do not use `NEXT_PUBLIC_` for this value. Estimate does not require an additional scope. Server mode is appropriate because only this server presents the key to Orchestra; backend client-key rate limits still apply. Requests share the proxy identity and its upstream per-IP quota (10 onramps/minute by default), in addition to the per-key quota. Treat this as an aggregate demo limit; assess capacity and trusted edge admission controls before scaling. Caller-supplied IP headers are never forwarded.
+
+Deploying with the old full key fails closed with HTTP 503. Existing sessions without an order read token cannot poll or stream. A code PR alone does not update a live deployment, rotate a key, or invalidate previously created credentials; handle incident containment and credential review separately with the account owner.
+
+## Verification
+
+Use Node.js 22.6+ to run `npm test` (or `bun run test`). The tests use dummy keys and a mocked upstream and never contact production. They cover forbidden admin/history/key routes, method and URL variants, read-token forwarding, response minimization, credential configuration, redirects, and the allowed onramp flow.
